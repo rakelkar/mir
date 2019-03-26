@@ -27,6 +27,10 @@ import (
 type ModelInferenceResourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:MinLength=1
+	DnsPrefix string `json:"dnsPrefix"`
 }
 
 // ModelInferenceResourceStatus defines the observed state of ModelInferenceResource

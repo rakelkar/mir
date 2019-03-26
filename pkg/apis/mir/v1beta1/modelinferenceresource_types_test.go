@@ -34,7 +34,11 @@ func TestStorageModelInferenceResource(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
-		}}
+		},
+		Spec: ModelInferenceResourceSpec{
+			DnsPrefix: "somePrefix",
+		},
+	}
 	g := gomega.NewGomegaWithT(t)
 
 	// Test Create
