@@ -6,4 +6,4 @@ metadata:
   name: modelinferenceresource-sample
 spec:
   # Add fields here
-  foo: bar
+  dnsPrefix: happy-camper

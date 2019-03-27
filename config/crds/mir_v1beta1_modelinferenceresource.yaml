@@ -27,6 +27,13 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            dnsPrefix:
+              maxLength: 15
+              minLength: 1
+              type: string
+          required:
+          - dnsPrefix
           type: object
         status:
           type: object
