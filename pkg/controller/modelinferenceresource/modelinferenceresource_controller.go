@@ -306,7 +306,7 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 				v1.ServicePort{
 					Protocol:   v1.ProtocolTCP,
 					Port:       int32(servicePort),
-					TargetPort: intstr.FromInt(80),
+					TargetPort: intstr.FromInt(5678),
 				},
 			},
 		},
@@ -332,8 +332,8 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 		// TODO(user): Change this for the object type created by your controller
 		// Update the found object and write the result back if there are any changes
-		if isFound && !reflect.DeepEqual(service.Spec, service.Spec) {
-			found.Spec = service.Spec
+		if isFound && !reflect.DeepEqual(found.Spec.Ports, service.Spec.Ports) {
+			found.Spec.Ports = service.Spec.Ports
 			log.Info("Updating Service", "namespace", service.Namespace, "name", service.Name)
 			err = r.Update(context.TODO(), found)
 			if err != nil {
@@ -421,8 +421,9 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "nginx",
-							Image: "nginx",
+							Name:  "echo",
+							Image: "hashicorp/http-echo",
+							Args:  []string{"-text=hello"},
 						},
 					},
 				},
