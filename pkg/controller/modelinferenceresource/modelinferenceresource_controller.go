@@ -19,12 +19,16 @@ package modelinferenceresource
 import (
 	"context"
 	"reflect"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	mirv1beta1 "github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -194,16 +198,23 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 	// Check if the Deployment already exists
 	{
 		found := &v1.Namespace{}
-		err = r.Get(context.TODO(), types.NamespacedName{Name: ns.Name, Namespace: "default"}, found)
+		err = r.Get(context.TODO(), types.NamespacedName{Name: ns.Name, Namespace: ""}, found)
 		if err != nil && errors.IsNotFound(err) {
 			log.Info("Creating Namespace", "namespace", "default", "name", ns.Name)
 			err = r.Create(context.TODO(), ns)
-		} else if err != nil {
+		}
+		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	az_vars := use_az_secret()
+	mir_resource_group := "rakelkar-delete-me"
+	mir_location := "eastus"
+	mir_tm_name := instance.Spec.DnsPrefix + "-mir-tm"
+	mir_dns_prefix := strings.ToLower(instance.Spec.DnsPrefix)
+	mir_tm_endpoint_name := "anep"
+	mir_tm_endpoint_address := "40.70.209.164"
 
 	job_ns := instance.Namespace
 	job := &batchv1.Job{
@@ -226,7 +237,7 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 						{
 							Name:    "azcmd",
 							Image:   "kcorer/azcmd",
-							Command: []string{"/entrypoint.sh", "/tm.sh", "rakelkar-delete-me", "eastus", "ugh-tm", "ahahahahahaha", "anep", "40.70.209.164"},
+							Command: []string{"/entrypoint.sh", "/tm.sh", mir_resource_group, mir_location, mir_tm_name, mir_dns_prefix, mir_tm_endpoint_name, mir_tm_endpoint_address},
 							Env:     az_vars,
 						},
 					},
@@ -243,18 +254,21 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 	// TODO(user): Change this for the object type created by your controller
 	// Check if the Deployment already exists
 	{
+		isFound := true
 		found := &batchv1.Job{}
 		err = r.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, found)
 		if err != nil && errors.IsNotFound(err) {
 			log.Info("Creating Job", "namespace", job.Namespace, "name", job.Name)
+			isFound = false
 			err = r.Create(context.TODO(), job)
-		} else if err != nil {
+		}
+		if err != nil {
 			return reconcile.Result{}, err
 		}
 
 		// TODO(user): Change this for the object type created by your controller
 		// Update the found object and write the result back if there are any changes
-		if !reflect.DeepEqual(job.Spec.Template.Spec, found.Spec.Template.Spec) {
+		if isFound && !reflect.DeepEqual(job.Spec.Template.Spec, found.Spec.Template.Spec) {
 			found.Spec.Template.Spec = job.Spec.Template.Spec
 			log.Info("Updating Job", "namespace", job.Namespace, "name", job.Name)
 			//err = r.Update(context.TODO(), found)
@@ -265,12 +279,124 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 		}
 	}
 
+	// Define the desired Service object
+	servicePort := 80
+	service := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instance.Name + "-service",
+			Namespace: ns.Name,
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"deployment": instance.Name + "-deployment"},
+			Ports: []v1.ServicePort{
+				v1.ServicePort{
+					Protocol:   v1.ProtocolTCP,
+					Port:       int32(servicePort),
+					TargetPort: intstr.FromInt(80),
+				},
+			},
+		},
+	}
+	if err := controllerutil.SetControllerReference(instance, service, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	{
+		// TODO(user): Change this for the object type created by your controller
+		// Check if the Service already exists
+		isFound := true
+		found := &v1.Service{}
+		err = r.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, found)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Service", "namespace", service.Namespace, "name", service.Name)
+			isFound = false
+			err = r.Create(context.TODO(), service)
+		}
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// TODO(user): Change this for the object type created by your controller
+		// Update the found object and write the result back if there are any changes
+		if isFound && !reflect.DeepEqual(service.Spec, service.Spec) {
+			found.Spec = service.Spec
+			log.Info("Updating Service", "namespace", service.Namespace, "name", service.Name)
+			err = r.Update(context.TODO(), found)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// Define the desired Ingress object
+	ingressHost := mir_dns_prefix + ".trafficmanager.net"
+	ingress := &extv1beta1.Ingress{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Ingress",
+			APIVersion: "extensions/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instance.Name,
+			Namespace: ns.Name,
+		},
+		Spec: extv1beta1.IngressSpec{
+			Rules: []extv1beta1.IngressRule{
+				extv1beta1.IngressRule{
+					Host: ingressHost,
+					IngressRuleValue: extv1beta1.IngressRuleValue{
+						HTTP: &extv1beta1.HTTPIngressRuleValue{
+							Paths: []extv1beta1.HTTPIngressPath{
+								extv1beta1.HTTPIngressPath{
+									Path: "/",
+									Backend: extv1beta1.IngressBackend{
+										ServiceName: service.Name,
+										ServicePort: intstr.FromInt(servicePort),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := controllerutil.SetControllerReference(instance, ingress, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	{
+		// TODO(user): Change this for the object type created by your controller
+		// Check if the Ingress already exists
+		isFound := true
+		found := &extv1beta1.Ingress{}
+		err = r.Get(context.TODO(), types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, found)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
+			isFound = false
+			err = r.Create(context.TODO(), ingress)
+		}
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// TODO(user): Change this for the object type created by your controller
+		// Update the found object and write the result back if there are any changes
+		if isFound && !reflect.DeepEqual(ingress.Spec, ingress.Spec) {
+			found.Spec = ingress.Spec
+			log.Info("Updating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
+			err = r.Update(context.TODO(), found)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// Define the desired Deployment object
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name + "-deployment",
 			Namespace: ns.Name,
-			Labels:    map[string]string{"dnsPrefix": instance.Spec.DnsPrefix},
+			Labels:    map[string]string{"dnsPrefix": mir_dns_prefix},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -295,19 +421,22 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 	// TODO(user): Change this for the object type created by your controller
 	// Check if the Deployment already exists
+	isFound := true
 	found := &appsv1.Deployment{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
+		isFound = false
 		err = r.Create(context.TODO(), deploy)
 		return reconcile.Result{}, err
-	} else if err != nil {
+	}
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// TODO(user): Change this for the object type created by your controller
 	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
+	if isFound && !reflect.DeepEqual(deploy.Spec, found.Spec) {
 		found.Spec = deploy.Spec
 		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
 		err = r.Update(context.TODO(), found)
