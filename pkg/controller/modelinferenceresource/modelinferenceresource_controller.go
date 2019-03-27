@@ -268,14 +268,15 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 		// TODO(user): Change this for the object type created by your controller
 		// Update the found object and write the result back if there are any changes
-		if isFound && !reflect.DeepEqual(job.Spec.Template.Spec, found.Spec.Template.Spec) {
-			found.Spec.Template.Spec = job.Spec.Template.Spec
-			log.Info("Updating Job", "namespace", job.Namespace, "name", job.Name)
-			//err = r.Update(context.TODO(), found)
-			if err != nil {
+		if isFound && !reflect.DeepEqual(job.Spec.Template.Spec.Containers, found.Spec.Template.Spec.Containers) {
+			found.Spec.Template.Spec.Containers = job.Spec.Template.Spec.Containers
+			log.Info("Deleting Updated Job", "namespace", job.Namespace, "name", job.Name)
+			err = r.Delete(context.TODO(), found)
+			if err != nil && !errors.IsNotFound(err) {
 				return reconcile.Result{}, err
 			}
-			log.Info("Skipped update")
+
+			return reconcile.Result{Requeue: true}, nil
 		}
 	}
 
