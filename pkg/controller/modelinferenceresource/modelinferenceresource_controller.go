@@ -18,6 +18,8 @@ package modelinferenceresource
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -209,12 +211,23 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 	}
 
 	az_vars := use_az_secret()
-	mir_resource_group := "rakelkar-delete-me"
-	mir_location := "eastus"
-	mir_tm_name := instance.Spec.DnsPrefix + "-mir-tm"
+	mir_scale_unit := os.Getenv("MIR_SCALE_UNIT")
+	if len(mir_scale_unit) == 0 {
+		mir_scale_unit = "su1"
+	}
+	mir_location := os.Getenv("MIR_LOCATION")
+	if len(mir_location) == 0 {
+		mir_location = "eastus"
+	}
+	mir_tm_endpoint_address := os.Getenv("MIR_ENDPOINT_ADDRESS")
+	if len(mir_tm_endpoint_address) == 0 {
+		// some crappy address TODO: get this from the cluster
+		mir_tm_endpoint_address = "40.70.209.164"
+	}
 	mir_dns_prefix := strings.ToLower(instance.Spec.DnsPrefix)
-	mir_tm_endpoint_name := "anep"
-	mir_tm_endpoint_address := "40.70.209.164"
+	mir_resource_group := fmt.Sprintf("mir-tms-%s-%s", mir_scale_unit, mir_location)
+	mir_tm_name := mir_dns_prefix + "-mir-tm"
+	mir_tm_endpoint_name := mir_scale_unit
 
 	job_ns := instance.Namespace
 	job := &batchv1.Job{
