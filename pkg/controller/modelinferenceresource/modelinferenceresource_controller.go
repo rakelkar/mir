@@ -183,10 +183,73 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	// init values TODO: do somewhere else
+	mir_scale_unit := os.Getenv("MIR_SCALE_UNIT")
+	if len(mir_scale_unit) == 0 {
+		mir_scale_unit = "su1"
+	}
+	mir_location := os.Getenv("MIR_LOCATION")
+	if len(mir_location) == 0 {
+		mir_location = "eastus"
+	}
+	mir_tm_endpoint_address := os.Getenv("MIR_ENDPOINT_ADDRESS")
+	if len(mir_tm_endpoint_address) == 0 {
+		// some crappy address TODO: get this from the cluster
+		mir_tm_endpoint_address = "40.70.209.164"
+	}
+	mir_dns_prefix := strings.ToLower(instance.Spec.DnsPrefix)
+	mir_resource_group := fmt.Sprintf("mir-tms-%s-%s", mir_scale_unit, mir_location)
+	mir_tm_name := mir_dns_prefix + "-mir-tm"
+	mir_tm_endpoint_name := mir_scale_unit
+
+	// add or execute finalizer
+	myFinalizerName := "tm.finalizer.azureml.microsoft.com"
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object.
+		if !containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
+			log.Info("add finalizer", "name", instance.Name)
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, myFinalizerName)
+			if err := r.Update(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
+			// our finalizer is present, so lets handle our external dependency
+			// Ensure that delete implementation is idempotent and safe to invoke
+			// multiple types for same object.
+			log.Info("deleting the external dependencies", "name", instance.Name)
+			cmd := []string{"/entrypoint.sh", "/ep_dtor.sh", mir_resource_group, mir_location, mir_tm_name, mir_dns_prefix, mir_tm_endpoint_name, mir_tm_endpoint_address}
+			job := constructJob(instance.Name+"-"+string(instance.UID)+"-dtor", instance.Namespace, cmd)
+			found := &batchv1.Job{}
+			err := r.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, found)
+			if err != nil && errors.IsNotFound(err) {
+				log.Info("Creating Job", "namespace", job.Namespace, "name", job.Name)
+				err = r.Create(context.TODO(), job)
+			}
+			if err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return reconcile.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, myFinalizerName)
+			if err := r.Update(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+
+		// Our finalizer has finished, so the reconciler can do nothing.
+		return reconcile.Result{}, nil
+	}
+
 	// TODO(user): Change this to be the object type created by your controller
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   instance.Name + "-ingress",
+			Name:   instance.Name + "-ns",
 			Labels: map[string]string{"mir": instance.Name},
 		},
 		Spec: v1.NamespaceSpec{},
@@ -210,56 +273,8 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 		}
 	}
 
-	az_vars := use_az_secret()
-	mir_scale_unit := os.Getenv("MIR_SCALE_UNIT")
-	if len(mir_scale_unit) == 0 {
-		mir_scale_unit = "su1"
-	}
-	mir_location := os.Getenv("MIR_LOCATION")
-	if len(mir_location) == 0 {
-		mir_location = "eastus"
-	}
-	mir_tm_endpoint_address := os.Getenv("MIR_ENDPOINT_ADDRESS")
-	if len(mir_tm_endpoint_address) == 0 {
-		// some crappy address TODO: get this from the cluster
-		mir_tm_endpoint_address = "40.70.209.164"
-	}
-	mir_dns_prefix := strings.ToLower(instance.Spec.DnsPrefix)
-	mir_resource_group := fmt.Sprintf("mir-tms-%s-%s", mir_scale_unit, mir_location)
-	mir_tm_name := mir_dns_prefix + "-mir-tm"
-	mir_tm_endpoint_name := mir_scale_unit
-
-	job_ns := instance.Namespace
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name + "-job",
-			Namespace: job_ns,
-			Labels:    make(map[string]string),
-		},
-		Spec: batchv1.JobSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: make(map[string]string),
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   instance.Name + "-job",
-					Labels: make(map[string]string),
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:    "azcmd",
-							Image:   "kcorer/azcmd",
-							Command: []string{"/entrypoint.sh", "/tm.sh", mir_resource_group, mir_location, mir_tm_name, mir_dns_prefix, mir_tm_endpoint_name, mir_tm_endpoint_address},
-							Env:     az_vars,
-						},
-					},
-					RestartPolicy: corev1.RestartPolicyOnFailure,
-				},
-			},
-		},
-	}
-
+	cmd := []string{"/entrypoint.sh", "/tm.sh", mir_resource_group, mir_location, mir_tm_name, mir_dns_prefix, mir_tm_endpoint_name, mir_tm_endpoint_address}
+	job := constructJob(instance.Name+"-"+string(instance.UID)+"-ctor", instance.Namespace, cmd)
 	if err := controllerutil.SetControllerReference(instance, job, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -281,7 +296,7 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 		// TODO(user): Change this for the object type created by your controller
 		// Update the found object and write the result back if there are any changes
-		if isFound && !reflect.DeepEqual(job.Spec.Template.Spec.Containers, found.Spec.Template.Spec.Containers) {
+		if isFound && !reflect.DeepEqual(job.Spec.Template.Spec.Containers[0].Command, found.Spec.Template.Spec.Containers[0].Command) {
 			found.Spec.Template.Spec.Containers = job.Spec.Template.Spec.Containers
 			log.Info("Deleting Updated Job", "namespace", job.Namespace, "name", job.Name)
 			err = r.Delete(context.TODO(), found)
@@ -459,5 +474,63 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 	}
+
 	return reconcile.Result{}, nil
+}
+
+func constructJob(name string, ns string, cmd []string) *batchv1.Job {
+	az_vars := use_az_secret()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    make(map[string]string),
+		},
+		Spec: batchv1.JobSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: make(map[string]string),
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   name,
+					Labels: make(map[string]string),
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:    "azcmd",
+							Image:   "kcorer/azcmd",
+							Command: cmd,
+							Env:     az_vars,
+						},
+					},
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+				},
+			},
+		},
+	}
+
+	return job
+}
+
+//
+// Helper functions to check and remove string from a slice of strings.
+//
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
 }
