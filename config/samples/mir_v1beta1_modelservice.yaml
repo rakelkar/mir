@@ -1,0 +1,9 @@
+apiVersion: mir.k8s.io/v1beta1
+kind: ModelService
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: modelservice-sample
+spec:
+  # Add fields here
+  foo: bar
