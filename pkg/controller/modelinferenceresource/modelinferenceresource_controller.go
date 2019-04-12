@@ -63,6 +63,8 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileModelInferenceResource{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
+// to create the secret this fn needs on your cluster, run:
+// kubectl create secret generic --namespace=${K8S_NAMESPACE} azcreds --from-literal=AZ_CLIENT_ID=${AZ_CLIENT_ID} --from-literal=AZ_CLIENT_SECRET=${AZ_CLIENT_SECRET} --from-literal=AZ_TENANT_ID=${AZ_TENANT_ID} --from-literal=AZ_SUBSCRIPTION_ID=${AZ_SUBSCRIPTION_ID}
 func use_az_secret() []v1.EnvVar {
 	secret_name := "azcreds"
 
