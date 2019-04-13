@@ -32,8 +32,12 @@ spec:
               maxLength: 15
               minLength: 1
               type: string
+            userSubscriptionId:
+              minLength: 1
+              type: string
           required:
           - dnsPrefix
+          - userSubscriptionId
           type: object
         status:
           type: object

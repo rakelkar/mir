@@ -27,6 +27,47 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            canary:
+              description: Optional Canary definition
+              properties:
+                custom:
+                  description: The following fields follow a "1-of" semantic. Users
+                    must specify exactly one spec.
+                  properties:
+                    container:
+                      type: object
+                  required:
+                  - container
+                  type: object
+                trafficPercent:
+                  format: int32
+                  type: integer
+              required:
+              - trafficPercent
+              type: object
+            default:
+              properties:
+                custom:
+                  description: The following fields follow a "1-of" semantic. Users
+                    must specify exactly one spec.
+                  properties:
+                    container:
+                      type: object
+                  required:
+                  - container
+                  type: object
+              type: object
+            maxReplicas:
+              format: int32
+              type: integer
+            minReplicas:
+              format: int32
+              type: integer
+          required:
+          - minReplicas
+          - maxReplicas
+          - default
           type: object
         status:
           type: object

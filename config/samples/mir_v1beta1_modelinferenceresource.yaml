@@ -7,3 +7,4 @@ metadata:
 spec:
   # Add fields here
   dnsPrefix: happy-camper
+  userSubscriptionId: some-sub

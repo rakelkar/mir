@@ -31,6 +31,9 @@ type ModelInferenceResourceSpec struct {
 	// +kubebuilder:validation:MaxLength=15
 	// +kubebuilder:validation:MinLength=1
 	DnsPrefix string `json:"dnsPrefix"`
+
+	// +kubebuilder:validation:MinLength=1
+	UserSubscriptionId string `json:"userSubscriptionId"`
 }
 
 // ModelInferenceResourceStatus defines the observed state of ModelInferenceResource

@@ -17,16 +17,39 @@ limitations under the License.
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// TODO: just use KFService and kill this
+// Copied from https://github.com/kubeflow/kfserving/blob/master/pkg/apis/serving/v1alpha1/kfservice_types.go
+
 // ModelServiceSpec defines the desired state of ModelService
 type ModelServiceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	MinReplicas int32 `json:"minReplicas"`
+	MaxReplicas int32 `json:"maxReplicas"`
+
+	Default ModelSpec `json:"default"`
+	// Optional Canary definition
+	Canary *CanarySpec `json:"canary,omitempty"`
+}
+
+type ModelSpec struct {
+	// The following fields follow a "1-of" semantic. Users must specify exactly one spec.
+	Custom *CustomSpec `json:"custom,omitempty"`
+}
+
+// CanarySpec defines an alternate configuration to route a percentage of traffic.
+type CanarySpec struct {
+	ModelSpec      `json:",inline"`
+	TrafficPercent int32 `json:"trafficPercent"`
+}
+
+type CustomSpec struct {
+	Container v1.Container `json:"container"`
 }
 
 // ModelServiceStatus defines the observed state of ModelService

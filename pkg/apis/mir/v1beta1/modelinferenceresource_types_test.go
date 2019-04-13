@@ -36,7 +36,8 @@ func TestStorageModelInferenceResource(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: ModelInferenceResourceSpec{
-			DnsPrefix: "somePrefix",
+			DnsPrefix:          "somePrefix",
+			UserSubscriptionId: "some-sub",
 		},
 	}
 	g := gomega.NewGomegaWithT(t)
