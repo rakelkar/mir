@@ -18,11 +18,18 @@ package modeldeploymentsource
 
 import (
 	"context"
-	"reflect"
+	"fmt"
+	"io/ioutil"
+	"os"
 
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+
+	"net/http"
+
+	"github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	mirv1beta1 "github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -100,6 +107,11 @@ type ReconcileModelDeploymentSource struct {
 // +kubebuilder:rbac:groups=mir.k8s.io,resources=modeldeploymentsources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mir.k8s.io,resources=modeldeploymentsources/status,verbs=get;update;patch
 func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	mir_service_host := os.Getenv("MIR_SERVICE_HOST")
+	if len(mir_service_host) == 0 {
+		mir_service_host = "MIR_SERVICE_HOST"
+	}
+
 	// Fetch the ModelDeploymentSource instance
 	instance := &mirv1beta1.ModelDeploymentSource{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -113,55 +125,105 @@ func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this to be the object type created by your controller
-	// Define the desired Deployment object
-	deploy := &appsv1.Deployment{
+	// TODO: can we get the MirName from the label of the namespace of the instance?
+	mirName := instance.Spec.MirName
+
+	// Create a namespace for the deployment source
+	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name + "-deployment",
-			Namespace: instance.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"deployment": instance.Name + "-deployment"},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "nginx",
-						},
-					},
-				},
+			Name: mirName + "-" + instance.Name + "-models",
+			Labels: map[string]string{
+				"mir":       mirName,
+				"mirsource": instance.Name,
 			},
 		},
+		Spec: v1.NamespaceSpec{},
 	}
-	if err := controllerutil.SetControllerReference(instance, deploy, r.scheme); err != nil {
+
+	if err := controllerutil.SetControllerReference(instance, ns, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this for the object type created by your controller
-	// Check if the Deployment already exists
-	found := &appsv1.Deployment{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
+	// Check if the Namespace already exists
+	found := &v1.Namespace{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: ns.Name, Namespace: ""}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Create(context.TODO(), deploy)
-		return reconcile.Result{}, err
-	} else if err != nil {
+		log.Info("Creating Namespace", "namespace", "default", "name", ns.Name)
+		err = r.Create(context.TODO(), ns)
+	}
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this for the object type created by your controller
-	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Update(context.TODO(), found)
+	url := fmt.Sprintf("http://%s/mir/%s/modelsource/%s/models", mir_service_host, mirName, instance.Name)
+	msl, err := r.downloadModelList(instance, url)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err := r.writeModelsToNamespace(instance, ns.Name, msl); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileModelDeploymentSource) downloadModelList(instance *mirv1beta1.ModelDeploymentSource, url string) (*mirv1beta1.ModelServiceList, error) {
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Info("Failed to download models for model source", "source", instance.Name, "url", url, "error", err.Error())
+		return &v1beta1.ModelServiceList{}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := ioutil.ReadAll(resp.Body)
+		log.Info("Failed to download models for model source", "source", instance.Name, "url", url, "error", string(b))
+		return &v1beta1.ModelServiceList{}, nil
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// attempt to pull models into the new namespace
+	codecs := serializer.NewCodecFactory(r.scheme)
+	deserializer := codecs.UniversalDeserializer()
+	obj, groupVersionKind, err := deserializer.Decode(b, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if groupVersionKind.Group != "mir" || groupVersionKind.Kind != "ModelService" {
+		return nil, fmt.Errorf("url %s returned invalid type: %s", url, groupVersionKind)
+	}
+
+	msl := obj.(*mirv1beta1.ModelServiceList)
+	return msl, nil
+}
+
+func (r *ReconcileModelDeploymentSource) writeModelsToNamespace(instance *mirv1beta1.ModelDeploymentSource, namespaceName string, msl *mirv1beta1.ModelServiceList) error {
+	for _, ms := range msl.Items {
+		ms.SetNamespace(namespaceName)
+
+		if err := controllerutil.SetControllerReference(instance, &ms, r.scheme); err != nil {
+			return err
+		}
+
+		// create if not found
+		found := &mirv1beta1.ModelService{}
+		err := r.Get(context.TODO(), types.NamespacedName{Name: ms.Name, Namespace: ms.Namespace}, found)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Model Service", "namespace", ms.Namespace, "name", ms.Name)
+			err = r.Create(context.TODO(), &ms)
+		}
 		if err != nil {
-			return reconcile.Result{}, err
+			return err
 		}
 	}
-	return reconcile.Result{}, nil
+
+	return nil
 }

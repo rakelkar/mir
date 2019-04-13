@@ -6,4 +6,4 @@ metadata:
   name: modeldeploymentsource-sample
 spec:
   # Add fields here
-  foo: bar
+  mirName: bar
