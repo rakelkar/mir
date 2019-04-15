@@ -18,15 +18,19 @@ package modelservice
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	mirv1beta1 "github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -113,12 +117,145 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// TODO: stuff that needs to come labels (set by mutating admission controller)
+	mir_dns_prefix := "haha"
+	namespace := instance.Namespace
+
+	// Define the desired Service object
+	if instance.Spec.Default.Custom == nil ||
+		instance.Spec.Default.Custom.Container.Ports == nil {
+		log.Info("Invalid spec", "name", instance.Name)
+		return reconcile.Result{}, fmt.Errorf("invalid spec, must have custom section")
+	}
+	// for now assume the spec has a single port that maps to the http port
+	if len(instance.Spec.Default.Custom.Container.Ports) != 1 ||
+		instance.Spec.Default.Custom.Container.Ports[0].Protocol != v1.ProtocolTCP {
+		log.Info("Port missing or wrong protocol", "name", instance.Name)
+		return reconcile.Result{}, fmt.Errorf("invalid spec, missing ports")
+	}
+
+	containerPort := instance.Spec.Default.Custom.Container.Ports[0]
+	servicePort := 80
+	servicePorts := []v1.ServicePort{
+		v1.ServicePort{
+			Protocol:   v1.ProtocolTCP,
+			Port:       int32(servicePort),
+			TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: containerPort.ContainerPort},
+		},
+	}
+
+	service := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instance.Name + "-svc",
+			Namespace: namespace,
+		},
+		Spec: v1.ServiceSpec{
+			Selector: map[string]string{"deployment": instance.Name + "-deployment"},
+			Ports:    servicePorts,
+		},
+	}
+	if err := controllerutil.SetControllerReference(instance, service, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	{
+		// TODO(user): Change this for the object type created by your controller
+		// Check if the Service already exists
+		isFound := true
+		found := &v1.Service{}
+		err = r.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, found)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Service", "namespace", service.Namespace, "name", service.Name)
+			isFound = false
+			err = r.Create(context.TODO(), service)
+		}
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// TODO(user): Change this for the object type created by your controller
+		// Update the found object and write the result back if there are any changes
+		if isFound && !reflect.DeepEqual(found.Spec.Ports, service.Spec.Ports) {
+			found.Spec.Ports = service.Spec.Ports
+			log.Info("Updating Service", "namespace", service.Namespace, "name", service.Name)
+			err = r.Update(context.TODO(), found)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// Define the desired Ingress object
+	ingressHost := mir_dns_prefix + ".trafficmanager.net"
+	ingress := &extv1beta1.Ingress{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Ingress",
+			APIVersion: "extensions/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instance.Name,
+			Namespace: namespace,
+		},
+		Spec: extv1beta1.IngressSpec{
+			Rules: []extv1beta1.IngressRule{
+				extv1beta1.IngressRule{
+					Host: ingressHost,
+					IngressRuleValue: extv1beta1.IngressRuleValue{
+						HTTP: &extv1beta1.HTTPIngressRuleValue{
+							Paths: []extv1beta1.HTTPIngressPath{
+								extv1beta1.HTTPIngressPath{
+									Path: "/",
+									Backend: extv1beta1.IngressBackend{
+										ServiceName: service.Name,
+										ServicePort: intstr.FromInt(servicePort),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := controllerutil.SetControllerReference(instance, ingress, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	{
+		// TODO(user): Change this for the object type created by your controller
+		// Check if the Ingress already exists
+		isFound := true
+		found := &extv1beta1.Ingress{}
+		err = r.Get(context.TODO(), types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, found)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
+			isFound = false
+			err = r.Create(context.TODO(), ingress)
+		}
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// TODO(user): Change this for the object type created by your controller
+		// Update the found object and write the result back if there are any changes
+		if isFound && !reflect.DeepEqual(ingress.Spec, ingress.Spec) {
+			found.Spec = ingress.Spec
+			log.Info("Updating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
+			err = r.Update(context.TODO(), found)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// TODO(user): Change this to be the object type created by your controller
 	// Define the desired Deployment object
+	containerSpec := instance.Spec.Default.Custom.Container.DeepCopy()
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name + "-deployment",
-			Namespace: instance.Namespace,
+			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -128,10 +265,7 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "nginx",
-						},
+						*containerSpec,
 					},
 				},
 			},
@@ -153,15 +287,16 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this for the object type created by your controller
-	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Update(context.TODO(), found)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	// // TODO(user): Change this for the object type created by your controller
+	// // Update the found object and write the result back if there are any changes
+	// if !reflect.DeepEqual(deploy.Spec, found.Spec) {
+	// 	found.Spec = deploy.Spec
+	// 	log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
+	// 	err = r.Update(context.TODO(), found)
+	// 	if err != nil {
+	// 		return reconcile.Result{}, err
+	// 	}
+	// }
+
 	return reconcile.Result{}, nil
 }

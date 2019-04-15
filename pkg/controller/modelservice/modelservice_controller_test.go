@@ -24,6 +24,7 @@ import (
 	mirv1beta1 "github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	"golang.org/x/net/context"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,7 +42,26 @@ const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &mirv1beta1.ModelService{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
+	instance := &mirv1beta1.ModelService{
+		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
+		Spec: mirv1beta1.ModelServiceSpec{
+			Default: mirv1beta1.ModelSpec{
+				Custom: &mirv1beta1.CustomSpec{
+					Container: v1.Container{
+						Name:  "echo",
+						Image: "hashicorp/http-echo",
+						Args:  []string{"-text=hello"},
+						Ports: []v1.ContainerPort{
+							v1.ContainerPort{
+								ContainerPort: 8888,
+								Protocol:      v1.ProtocolTCP,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -84,5 +104,4 @@ func TestReconcile(t *testing.T) {
 	// Manually delete Deployment since GC isn't enabled in the test control plane
 	g.Eventually(func() error { return c.Delete(context.TODO(), deploy) }, timeout).
 		Should(gomega.MatchError("deployments.apps \"foo-deployment\" not found"))
-
 }
