@@ -125,15 +125,43 @@ func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 
-	// TODO: can we get the MirName from the label of the namespace of the instance?
-	mirName := instance.Spec.MirName
+	// Create a namespace for CRDs
+	crdNsName := getMirName(instance) + "-" + instance.Name
+	if result, err := r.createNamespace(instance, crdNsName); err != nil {
+		return result, err
+	}
 
-	// Create a namespace for the deployment source
+	// Create a namespace for other stuff
+	stuffNsName := crdNsName + "-stuff"
+	if result, err := r.createNamespace(instance, stuffNsName); err != nil {
+		return result, err
+	}
+
+	url := fmt.Sprintf("http://%s/mir/%s/modelsource/%s/models", mir_service_host, getMirName(instance), instance.Name)
+	msl, err := r.downloadModelList(instance, url)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err := r.writeModelsToNamespace(instance, crdNsName, msl); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// TODO: can we get the MirName from the label of the namespace of the instance?
+// maybe it get set by an admission controller?
+func getMirName(instance *mirv1beta1.ModelDeploymentSource) string {
+	return instance.Spec.MirName
+}
+
+func (r *ReconcileModelDeploymentSource) createNamespace(instance *mirv1beta1.ModelDeploymentSource, nsName string) (reconcile.Result, error) {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: mirName + "-" + instance.Name + "-models",
+			Name: nsName,
 			Labels: map[string]string{
-				"mir":       mirName,
+				"mir":       getMirName(instance),
 				"mirsource": instance.Name,
 			},
 		},
@@ -146,22 +174,12 @@ func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (r
 
 	// Check if the Namespace already exists
 	found := &v1.Namespace{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: ns.Name, Namespace: ""}, found)
+	err := r.Get(context.TODO(), types.NamespacedName{Name: ns.Name, Namespace: ""}, found)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Namespace", "namespace", "default", "name", ns.Name)
 		err = r.Create(context.TODO(), ns)
 	}
 	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	url := fmt.Sprintf("http://%s/mir/%s/modelsource/%s/models", mir_service_host, mirName, instance.Name)
-	msl, err := r.downloadModelList(instance, url)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if err := r.writeModelsToNamespace(instance, ns.Name, msl); err != nil {
 		return reconcile.Result{}, err
 	}
 

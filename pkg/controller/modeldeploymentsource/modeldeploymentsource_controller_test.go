@@ -36,7 +36,7 @@ import (
 var c client.Client
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
-var nsKey = types.NamespacedName{Name: "somemir-foo-models", Namespace: ""}
+var nsKey = types.NamespacedName{Name: "somemir-foo", Namespace: ""}
 
 const timeout = time.Second * 5
 
@@ -86,5 +86,5 @@ func TestReconcile(t *testing.T) {
 
 	// Manually delete Deployment since GC isn't enabled in the test control plane
 	g.Eventually(func() error { return c.Delete(context.TODO(), ns) }, timeout).
-		Should(gomega.MatchError("Operation cannot be fulfilled on namespaces \"somemir-foo-models\": The system is ensuring all content is removed from this namespace.  Upon completion, this namespace will automatically be purged by the system."))
+		Should(gomega.MatchError("Operation cannot be fulfilled on namespaces \"somemir-foo\": The system is ensuring all content is removed from this namespace.  Upon completion, this namespace will automatically be purged by the system."))
 }
