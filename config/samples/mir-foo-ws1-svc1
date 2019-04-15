@@ -1,8 +1,8 @@
 apiVersion: mir.k8s.io/v1beta1
 kind: ModelService
 metadata:
-  name: ads1
-  namespace: mir-ads-ws1
+  name: svc1
+  namespace: mir-foo-ws1
 spec:
   minReplicas: 1
   maxReplicas: 1
