@@ -117,9 +117,20 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// TODO: stuff that needs to come labels (set by mutating admission controller)
-	mir_dns_prefix := "haha"
-	namespace := instance.Namespace
+	// TODO: stuff that needs to come labels set by mutating admission controller
+	var mir_dns_prefix, namespace string
+	containingNs := &v1.Namespace{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Namespace, Namespace: ""}, containingNs)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	ok := false
+	if mir_dns_prefix, ok = containingNs.ObjectMeta.Labels["mir-dns-prefix"]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace is missing mir-dns-prefix label")
+	}
+	if namespace, ok = containingNs.ObjectMeta.Labels["model-ns"]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace is missing model-ns label")
+	}
 
 	// Define the desired Service object
 	if instance.Spec.Default.Custom == nil ||
