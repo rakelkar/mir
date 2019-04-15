@@ -381,7 +381,7 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 						HTTP: &extv1beta1.HTTPIngressRuleValue{
 							Paths: []extv1beta1.HTTPIngressPath{
 								extv1beta1.HTTPIngressPath{
-									Path: "/",
+									Path: "/health",
 									Backend: extv1beta1.IngressBackend{
 										ServiceName: service.Name,
 										ServicePort: intstr.FromInt(servicePort),
