@@ -27,11 +27,6 @@ spec:
         metadata:
           type: object
         spec:
-          properties:
-            mirName:
-              type: string
-          required:
-          - mirName
           type: object
         status:
           type: object
