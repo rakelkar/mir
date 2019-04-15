@@ -133,11 +133,13 @@ func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 	ok := false
-	if mir, ok = containingNs.ObjectMeta.Labels["mir"]; !ok {
-		return reconcile.Result{}, fmt.Errorf("namespace is missing mir label")
+	key := "mir"
+	if mir, ok = containingNs.ObjectMeta.Labels[key]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace [%s] is missing label [%s]", containingNs.Name, key)
 	}
-	if mir_dns_prefix, ok = containingNs.ObjectMeta.Labels["mir-dns-prefix"]; !ok {
-		return reconcile.Result{}, fmt.Errorf("namespace is missing mir-dns-prefix label")
+	key = "mir-dns-prefix"
+	if mir_dns_prefix, ok = containingNs.ObjectMeta.Labels[key]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace [%s] is missing label [%s]", containingNs.Name, key)
 	}
 
 	sourceNsName := mir + "-" + instance.Name
