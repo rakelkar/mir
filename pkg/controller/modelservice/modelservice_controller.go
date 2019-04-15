@@ -118,7 +118,7 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// TODO: stuff that needs to come labels set by mutating admission controller
-	var mir_dns_prefix, namespace string
+	var mir_dns_prefix, namespace, modelSourceName string
 	containingNs := &v1.Namespace{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Namespace, Namespace: ""}, containingNs)
 	if err != nil {
@@ -130,6 +130,9 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 	}
 	if namespace, ok = containingNs.ObjectMeta.Labels["model-ns"]; !ok {
 		return reconcile.Result{}, fmt.Errorf("namespace is missing model-ns label")
+	}
+	if modelSourceName, ok = containingNs.ObjectMeta.Labels["modelsource"]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace is missing modelsource label")
 	}
 
 	// Define the desired Service object
@@ -198,6 +201,7 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 
 	// Define the desired Ingress object
 	ingressHost := mir_dns_prefix + ".trafficmanager.net"
+	modelPath := "/" + modelSourceName + "/model/" + instance.Name + "/predict"
 	ingress := &extv1beta1.Ingress{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Ingress",
@@ -215,7 +219,7 @@ func (r *ReconcileModelService) Reconcile(request reconcile.Request) (reconcile.
 						HTTP: &extv1beta1.HTTPIngressRuleValue{
 							Paths: []extv1beta1.HTTPIngressPath{
 								extv1beta1.HTTPIngressPath{
-									Path: "/",
+									Path: modelPath,
 									Backend: extv1beta1.IngressBackend{
 										ServiceName: service.Name,
 										ServicePort: intstr.FromInt(servicePort),

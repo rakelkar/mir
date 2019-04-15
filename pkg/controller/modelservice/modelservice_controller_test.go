@@ -77,6 +77,7 @@ func TestReconcile(t *testing.T) {
 				"mir":            "someMir",
 				"mir-dns-prefix": "some-prefix",
 				"model-ns":       "model-ns",
+				"modelsource":    "someSource",
 			},
 		},
 		Spec: v1.NamespaceSpec{},

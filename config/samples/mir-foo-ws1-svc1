@@ -15,5 +15,5 @@ spec:
         - -text=hello
         ports:
          - name: http
-           containerPort: 8888 
+           containerPort: 5678 
            protocol: TCP
