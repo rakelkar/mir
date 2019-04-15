@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
-	"github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	mirv1beta1 "github.com/rakelkar/mir/pkg/apis/mir/v1beta1"
 	"golang.org/x/net/context"
 	v1 "k8s.io/api/core/v1"
@@ -35,7 +34,7 @@ import (
 
 var c client.Client
 
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
+var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "mir-ns"}}
 var nsKey = types.NamespacedName{Name: "somemir-foo", Namespace: ""}
 
 const timeout = time.Second * 5
@@ -43,14 +42,26 @@ const timeout = time.Second * 5
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &mirv1beta1.ModelDeploymentSource{
-		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
-		Spec:       v1beta1.ModelDeploymentSourceSpec{MirName: "somemir"},
+		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "mir-ns"},
 	}
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, err := manager.New(cfg, manager.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
+
+	sourceNs := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mir-ns",
+			Labels: map[string]string{
+				"mir":            "somemir",
+				"mir-dns-prefix": "some-prefix",
+			},
+		},
+		Spec: v1.NamespaceSpec{},
+	}
+	err = c.Create(context.TODO(), sourceNs)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	recFn, requests := SetupTestReconcile(newReconciler(mgr))
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())

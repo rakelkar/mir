@@ -27,8 +27,6 @@ import (
 type ModelDeploymentSourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	MirName string `json:"mirName"`
 }
 
 // ModelDeploymentSourceStatus defines the observed state of ModelDeploymentSource

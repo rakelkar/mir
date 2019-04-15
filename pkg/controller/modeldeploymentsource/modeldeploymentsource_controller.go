@@ -125,44 +125,56 @@ func (r *ReconcileModelDeploymentSource) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 
+	// TODO: stuff that needs to come labels set by mutating admission controller
+	var mir_dns_prefix, mir string
+	containingNs := &v1.Namespace{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Namespace, Namespace: ""}, containingNs)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	ok := false
+	if mir, ok = containingNs.ObjectMeta.Labels["mir"]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace is missing mir label")
+	}
+	if mir_dns_prefix, ok = containingNs.ObjectMeta.Labels["mir-dns-prefix"]; !ok {
+		return reconcile.Result{}, fmt.Errorf("namespace is missing mir-dns-prefix label")
+	}
+
+	sourceNsName := mir + "-" + instance.Name
+	stuffNsName := sourceNsName + "-stuff"
+
 	// Create a namespace for CRDs
-	crdNsName := getMirName(instance) + "-" + instance.Name
-	if result, err := r.createNamespace(instance, crdNsName); err != nil {
+	if result, err := r.createNamespace(instance, sourceNsName, sourceNsName, stuffNsName, mir, mir_dns_prefix); err != nil {
 		return result, err
 	}
 
 	// Create a namespace for other stuff
-	stuffNsName := crdNsName + "-stuff"
-	if result, err := r.createNamespace(instance, stuffNsName); err != nil {
+	if result, err := r.createNamespace(instance, stuffNsName, sourceNsName, stuffNsName, mir, mir_dns_prefix); err != nil {
 		return result, err
 	}
 
-	url := fmt.Sprintf("http://%s/mir/%s/modelsource/%s/models", mir_service_host, getMirName(instance), instance.Name)
+	url := fmt.Sprintf("http://%s/mir/%s/modelsource/%s/models", mir_service_host, mir, instance.Name)
 	msl, err := r.downloadModelList(instance, url)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err := r.writeModelsToNamespace(instance, crdNsName, msl); err != nil {
+	if err := r.writeModelsToNamespace(instance, sourceNsName, msl); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
 }
 
-// TODO: can we get the MirName from the label of the namespace of the instance?
-// maybe it get set by an admission controller?
-func getMirName(instance *mirv1beta1.ModelDeploymentSource) string {
-	return instance.Spec.MirName
-}
-
-func (r *ReconcileModelDeploymentSource) createNamespace(instance *mirv1beta1.ModelDeploymentSource, nsName string) (reconcile.Result, error) {
+func (r *ReconcileModelDeploymentSource) createNamespace(instance *mirv1beta1.ModelDeploymentSource, nsName string, sourceNsName string, stuffNsName string, mir string, mir_dns_prefix string) (reconcile.Result, error) {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
 			Labels: map[string]string{
-				"mir":       getMirName(instance),
-				"mirsource": instance.Name,
+				"mir":            mir,
+				"mir-dns-prefix": mir_dns_prefix,
+				"source-ns":      sourceNsName,
+				"model-ns":       stuffNsName,
 			},
 		},
 		Spec: v1.NamespaceSpec{},
