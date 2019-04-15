@@ -335,28 +335,28 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 	{
 		// TODO(user): Change this for the object type created by your controller
 		// Check if the Service already exists
-		isFound := true
+		// isFound := true
 		found := &v1.Service{}
 		err = r.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, found)
 		if err != nil && errors.IsNotFound(err) {
 			log.Info("Creating Service", "namespace", service.Namespace, "name", service.Name)
-			isFound = false
+			// isFound = false
 			err = r.Create(context.TODO(), service)
 		}
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		// TODO(user): Change this for the object type created by your controller
-		// Update the found object and write the result back if there are any changes
-		if isFound && !reflect.DeepEqual(found.Spec.Ports, service.Spec.Ports) {
-			found.Spec.Ports = service.Spec.Ports
-			log.Info("Updating Service", "namespace", service.Namespace, "name", service.Name)
-			err = r.Update(context.TODO(), found)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
+		// // TODO(user): Change this for the object type created by your controller
+		// // Update the found object and write the result back if there are any changes
+		// if isFound && !reflect.DeepEqual(found.Spec.Ports, service.Spec.Ports) {
+		// 	found.Spec.Ports = service.Spec.Ports
+		// 	log.Info("Updating Service", "namespace", service.Namespace, "name", service.Name)
+		// 	err = r.Update(context.TODO(), found)
+		// 	if err != nil {
+		// 		return reconcile.Result{}, err
+		// 	}
+		// }
 	}
 
 	// Define the desired Ingress object
@@ -398,28 +398,28 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 	{
 		// TODO(user): Change this for the object type created by your controller
 		// Check if the Ingress already exists
-		isFound := true
+		// isFound := true
 		found := &extv1beta1.Ingress{}
 		err = r.Get(context.TODO(), types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, found)
 		if err != nil && errors.IsNotFound(err) {
 			log.Info("Creating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
-			isFound = false
+			// isFound = false
 			err = r.Create(context.TODO(), ingress)
 		}
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		// TODO(user): Change this for the object type created by your controller
-		// Update the found object and write the result back if there are any changes
-		if isFound && !reflect.DeepEqual(ingress.Spec, ingress.Spec) {
-			found.Spec = ingress.Spec
-			log.Info("Updating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
-			err = r.Update(context.TODO(), found)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
+		// // TODO(user): Change this for the object type created by your controller
+		// // Update the found object and write the result back if there are any changes
+		// if isFound && !reflect.DeepEqual(ingress.Spec, ingress.Spec) {
+		// 	found.Spec = ingress.Spec
+		// 	log.Info("Updating Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
+		// 	err = r.Update(context.TODO(), found)
+		// 	if err != nil {
+		// 		return reconcile.Result{}, err
+		// 	}
+		// }
 	}
 
 	// Define the desired Deployment object
@@ -453,14 +453,13 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 	// TODO(user): Change this for the object type created by your controller
 	// Check if the Deployment already exists
-	isFound := true
+	// isFound := true
 	found := &appsv1.Deployment{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		isFound = false
+		// isFound = false
 		err = r.Create(context.TODO(), deploy)
-		return reconcile.Result{}, err
 	}
 	if err != nil {
 		return reconcile.Result{}, err
@@ -468,14 +467,14 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 
 	// TODO(user): Change this for the object type created by your controller
 	// Update the found object and write the result back if there are any changes
-	if isFound && !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Update(context.TODO(), found)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	// if isFound && !reflect.DeepEqual(deploy.Spec, found.Spec) {
+	// 	found.Spec = deploy.Spec
+	// 	log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
+	// 	err = r.Update(context.TODO(), found)
+	// 	if err != nil {
+	// 		return reconcile.Result{}, err
+	// 	}
+	// }
 
 	return reconcile.Result{}, nil
 }
