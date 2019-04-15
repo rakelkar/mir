@@ -1,0 +1,5 @@
+apiVersion: mir.k8s.io/v1beta1
+kind: ModelDeploymentSource
+metadata:
+  name: ws1
+  namespace: mir-ads-ns

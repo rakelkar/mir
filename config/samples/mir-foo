@@ -1,0 +1,7 @@
+apiVersion: mir.k8s.io/v1beta1
+kind: ModelInferenceResource
+metadata:
+  name: mir-foo
+spec:
+  dnsPrefix: fooprefix
+  userSubscriptionId: some-sub

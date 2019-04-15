@@ -1,9 +1,8 @@
 apiVersion: mir.k8s.io/v1beta1
 kind: ModelService
 metadata:
-  labels:
-    controller-tools.k8s.io: "1.0"
-  name: modelservice-sample
+  name: ads1
+  namespace: mir-ads-ws1
 spec:
   minReplicas: 1
   maxReplicas: 1
