@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
@@ -177,6 +178,7 @@ func (r *ReconcileModelDeploymentSource) createNamespace(instance *mirv1beta1.Mo
 				"mir-dns-prefix": mir_dns_prefix,
 				"source-ns":      sourceNsName,
 				"model-ns":       stuffNsName,
+				"modelsource":    strings.ToLower(instance.Name),
 			},
 		},
 		Spec: v1.NamespaceSpec{},
