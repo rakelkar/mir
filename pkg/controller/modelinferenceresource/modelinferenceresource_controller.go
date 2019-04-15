@@ -253,8 +253,8 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 		ObjectMeta: metav1.ObjectMeta{
 			Name: instance.Name + "-ns",
 			Labels: map[string]string{
-				"mir":           instance.Name,
-				"mir-dns-prfix": mir_dns_prefix,
+				"mir":            instance.Name,
+				"mir-dns-prefix": mir_dns_prefix,
 			},
 		},
 		Spec: v1.NamespaceSpec{},
