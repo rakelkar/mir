@@ -18,7 +18,6 @@ package modelinferenceresource
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -200,7 +199,7 @@ func (r *ReconcileModelInferenceResource) Reconcile(request reconcile.Request) (
 		mir_tm_endpoint_address = "40.70.209.164"
 	}
 	mir_dns_prefix := strings.ToLower(instance.Spec.DnsPrefix)
-	mir_resource_group := fmt.Sprintf("mir-tms-%s-%s", mir_scale_unit, mir_location)
+	mir_resource_group := "mir-trafficmanagers"
 	mir_tm_name := mir_dns_prefix + "-mir-tm"
 	mir_tm_endpoint_name := mir_scale_unit
 
