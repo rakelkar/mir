@@ -10,3 +10,10 @@ spec:
       # Change the value of image field below to your controller image URL
       - image: kcorer/mircontroller:latest
         name: manager
+        env:
+        - name: MIR_ENDPOINT_ADDRESS
+          value: 40.90.187.39
+        - name: MIR_LOCATION
+          value: eastus
+        - name: MIR_SCALE_UNIT
+          value: su1
